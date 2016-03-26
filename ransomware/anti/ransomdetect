@@ -1,0 +1,195 @@
+#! /usr/bin/env python
+import os, random, string, sys, subprocess
+
+root_dir = os.getcwd()
+check_files = 20
+check_size = 20000
+kill = 0
+permissions = 1555
+extension = ""
+
+def help():
+	print("\nUsage: ransomdetect [OPTIONS] ...")
+	print("- Fills dir and subdirs with hidden check files")
+	print("- Checks integrity of all check files annd notifies instantly of any changes")
+	print("- Sets permissions of files to no-write if alerted")
+	print("- Attempts to find and kill ransomware process")
+	print("\nOptional arguments:")
+	print("-b\tSize of check file in bytes (default 20000)")
+	print("-c\tAttempt to clean up check files")
+	print("-d\tDirectory to run detection on (default is current working directory)")
+	print("-e\tExtension to add to the end of check files (default is none), eg '.pdf'")
+	print("-h\tShow help options")
+	print("-k\tAttempt to find and kill ransomware process (default off)")
+	print("-n\tNumber of check files to pace in each directory (default 20)")
+	print("-p\tPermissions to set on lockdown (default 1555)\n")
+	sys.exit()
+
+if "-b" in sys.argv:
+	try:
+		check_size = int( sys.argv[ int( sys.argv.index("-b") ) + 1 ] )
+	except:
+		print("Error - incorrect syntax")
+		print("'ransomdetect -h' for options")
+		sys.exit()
+
+if "-d" in sys.argv:
+        try:
+                root_dir = str( sys.argv[ int( sys.argv.index("-d") ) + 1 ] )
+        except:
+                print("Error - incorrect syntax")
+                print("'ransomdetect -h' for options")
+		sys.exit()
+if "-e" in sys.argv:
+        try:
+                extension = str( sys.argv[ int( sys.argv.index("-e") ) + 1 ] )
+        except:
+                print("Error - incorrect syntax")
+                print("'ransomdetect -h' for options")
+                sys.exit()
+
+
+if "-h" in sys.argv:
+	help()
+
+if "-k" in sys.argv:
+	kill = 1
+
+if "-n" in sys.argv:
+        try:
+                check_files = int( sys.argv[ int( sys.argv.index("-n") ) + 1 ] )
+        except:
+                print("Error - incorrect syntax")
+                print("'ransomdetect -h' for options")
+		sys.exit()
+
+if "-p" in sys.argv:
+        try:
+                permissions = int( sys.argv[ int( sys.argv.index("-p") ) + 1 ] )
+        except:
+                print("Error - incorrect syntax")
+                print("'ransomdetect -h' for options")
+                sys.exit()
+
+
+#setting permissions
+def alert2(dir_path, check_files, root_dir, permissions):
+	print("Potential ransomware attack detected at " + dir_path)
+	try:
+		os.system("chmod " + str(permissions) + " " + dir_path + "/*")
+		for subdir, dirs, files in os.walk(root_dir):
+			print("chmod " + str(permissions) + " " + subdir + "/*")
+                        os.system("chmod " + str(permissions) + " " + subdir + "/*")
+                print("Locked all files.")
+		if kill:
+			alert(dir_path, check_files, root_dir)
+		print("Shutting down")
+                sys.exit()
+	except KeyboardInterrupt:
+		for subdir, dirs, files in os.walk(root_dir):
+                        delete_check(subdir, check_files)    
+                print("Check files removed - shutting down.")
+                sys.exit()
+
+#attempting to kill ransomware
+def alert(dir_path, check_files, root_dir):
+	print("Attempting to find and kill ransomware process")
+	try:
+		for i in range(100):
+			for i in range(check_files):
+				#subprocess.call(["fuser", "-k", dir_path + "/.check" + str(i)])
+				os.system("fuser -v -k " + dir_path + "/.check" + str(i) + extension)
+	except KeyboardInterrupt:
+		for subdir, dirs, files in os.walk(root_dir):
+			delete_check(subdir, check_files)
+		print("Check files removed - shutting down.")
+		sys.exit()
+	### add protocol for preventing ransomware continuing here ###
+
+def randomword(length):
+	return ''.join(random.choice("abcdefghijklmnopqrstuvwxyz") for i in range(length))
+
+def check_dir(dir_path, check_files, random, root_dir):
+	check = 0
+	clean = 1
+	for i in range(check_files):
+		try:
+			file = open(dir_path + "/.check" + str(i) + extension)
+			check = file.read()
+			file.close()
+		except KeyboardInterrupt:
+			for subdir, dirs, files in os.walk(root_dir):
+				delete_check(subdir, check_files)
+			print("Check files removed - shutting down.")
+			sys.exit()
+		except:
+			clean = 0
+			print("Error: Can't read " + dir_path + "/.check" + str(i) + extension)
+		if check == random:
+			pass
+		else:
+			clean = 0
+			print(dir_path + "/.check" + str(i) + extension + " has unexpected contents")
+	return clean
+
+def add_check(dir_path, random, check_files):
+	for i in range(check_files):
+		file = open(dir_path + "/.check" + str(i) + extension, "w")
+		file.write(random)
+		file.close()
+	print("Checks added to " + dir_path)
+	
+def delete_check(dir_path, check_files):
+	#print("rm " + dir_path  + "/.check*")
+	#os.system
+	#for i in range(check_files):
+	#	os.remove(dir_path + "/.check" + str(i) + extension)
+	try:
+		os.system("rm " + dir_path + "/.check*")
+	except:
+		print("Nothing to delete at " + dir_path)
+
+if "-c" in sys.argv:
+        try:
+                for subdir, dirs, files in os.walk(root_dir):
+                        delete_check(subdir, check_files)
+        except:
+                print("Error cleaning directories - nothing to clean")
+        sys.exit()
+
+
+random = randomword(check_size)
+
+print("Starting ransomware checker...")
+### adding check files ###
+for subdir, dirs, files in os.walk(root_dir):
+	add_check(subdir, random, check_files)
+
+print("Ransomware checker running in " + root_dir)
+if kill:
+	print("Kill enabled")
+else:
+	print("Kill disabled")
+
+print("Created " + str(check_files) + " check files in each directory, each of size " + str(check_size) + " bytes")
+
+if extension != "":
+	print("Using extension: " + extension )
+
+print("Monitoring.....")
+### checking files ###
+flagged = []
+
+try:
+	while 1 == 1:
+		for subdir, dirs, files in os.walk(root_dir):
+			if not check_dir( subdir, check_files, random, root_dir ):
+				if subdir not in flagged:
+					alert2( subdir, check_files, root_dir, permissions )
+				flagged.append( subdir )
+except KeyboardInterrupt:
+	### deleting check files ###
+	for subdir, dirs, files in os.walk(root_dir):
+		delete_check(subdir, check_files)
+	print("Check files removed - shutting down.")
+	sys.exit()
